@@ -38,7 +38,7 @@
     .main { display: grid; grid-template-columns: 1fr 380px; gap: 0; min-height: calc(100vh - 180px); }
     @media (max-width: 960px) { .main { grid-template-columns: 1fr; } .sidebar { order: -1; max-height: 420px; } }
     .map-section { position: relative; display: flex; flex-direction: column; }
-    #map { flex: 1; min-height: 480px; background: #0d1218; }
+    #map { flex: 1; min-height: 480px; background: #e8eef4; }
     .map-overlay { position: absolute; top: 12px; left: 12px; z-index: 500; display: flex; flex-direction: column; gap: 8px; }
     .filter-chip { background: rgba(18,24,31,0.92); border: 1px solid var(--border); color: var(--text); font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; backdrop-filter: blur(8px); transition: all 0.15s; }
     .filter-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
@@ -235,7 +235,7 @@
 
     function initMap() {
       map = L.map('map', { center: [36.1699, -115.1398], zoom: 11, zoomControl: true });
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxZoom: 19
       }).addTo(map);
       markersLayer = L.layerGroup().addTo(map);
