@@ -2,7 +2,8 @@
 """
 Vegas Crime Watcher — pure Python (stdlib only)
 
-Complete working interactive Las Vegas crime map + live-style feed.
+Interactive Las Vegas crime map + live-style feed.
+Integrates LVMPD ArcGIS Calls-for-Service data with seed fallback.
 Zero external dependencies.
 """
 
@@ -11,23 +12,38 @@ from __future__ import annotations
 import json
 import random
 import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths & config
 # ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).resolve().parent
 TEMPLATE_PATH = ROOT / "templates" / "index.html"
 
+# LVMPD ArcGIS Feature Service (public, no API key)
+ARCGIS_QUERY_URL = (
+    "https://services.arcgis.com/jjSk6t82vIntwDbs/ArcGIS/rest/services/"
+    "LVMPD_Calls_For_Service_All/FeatureServer/0/query"
+)
+
+# How often to poll ArcGIS (seconds)
+POLL_INTERVAL_SEC = 600  # 10 minutes
+# How many recent CFS records to pull per poll
+POLL_LIMIT = 150
+
 # ---------------------------------------------------------------------------
-# Crime data (seeded from public LVMPD / news reports – July 2026)
+# Seed crime data (fallback when ArcGIS is unreachable)
 # ---------------------------------------------------------------------------
 
-CRIMES: list[dict] = [
+SEED_CRIMES: list[dict] = [
     {
         "id": 1,
         "type": "homicide",
@@ -41,6 +57,7 @@ CRIMES: list[dict] = [
             "Suspect (Rodger Harrison, 28) arrested nearby. "
             "Charges: open murder, robbery, CCW."
         ),
+        "source": "seed",
     },
     {
         "id": 2,
@@ -55,6 +72,7 @@ CRIMES: list[dict] = [
             "with firearm; officer discharged. Suspect deceased; second male "
             "critical. 8th OIS of 2026."
         ),
+        "source": "seed",
     },
     {
         "id": 3,
@@ -68,6 +86,7 @@ CRIMES: list[dict] = [
             "Carlos Valenzuela, 20, killed. Cousins Jayden Torres (19) and "
             "Kassandra Orozco (16) arrested on open murder charges."
         ),
+        "source": "seed",
     },
     {
         "id": 4,
@@ -81,6 +100,7 @@ CRIMES: list[dict] = [
             "Jordan Ruby pleaded guilty in high-profile robbery spree that "
             "killed two victims, including a senior."
         ),
+        "source": "seed",
     },
     {
         "id": 5,
@@ -94,6 +114,7 @@ CRIMES: list[dict] = [
             "LVMPD investigating murder-suicide. Details limited pending "
             "investigation."
         ),
+        "source": "seed",
     },
     {
         "id": 6,
@@ -107,6 +128,7 @@ CRIMES: list[dict] = [
             "Additional suspect arrested in connection with earlier fatal "
             "shooting."
         ),
+        "source": "seed",
     },
     {
         "id": 7,
@@ -119,6 +141,7 @@ CRIMES: list[dict] = [
         "description": (
             "Multiple vehicle theft reports in southeast valley neighborhoods."
         ),
+        "source": "seed",
     },
     {
         "id": 8,
@@ -129,6 +152,7 @@ CRIMES: list[dict] = [
         "lng": -115.2600,
         "time": "2026-07-25",
         "description": "Breaking & entering reported; investigation ongoing.",
+        "source": "seed",
     },
     {
         "id": 9,
@@ -141,6 +165,7 @@ CRIMES: list[dict] = [
         "description": (
             "Suspect fled after attempting to rob business. Public asked for tips."
         ),
+        "source": "seed",
     },
     {
         "id": 10,
@@ -154,6 +179,7 @@ CRIMES: list[dict] = [
             "Man killed, woman injured after verbal altercation escalated to "
             "gunfire. Suspect fled."
         ),
+        "source": "seed",
     },
     {
         "id": 11,
@@ -164,6 +190,7 @@ CRIMES: list[dict] = [
         "lng": -115.2700,
         "time": "2026-07-15",
         "description": "Destruction/damage of property reported.",
+        "source": "seed",
     },
     {
         "id": 12,
@@ -174,6 +201,7 @@ CRIMES: list[dict] = [
         "lng": -115.2300,
         "time": "2026-07-14",
         "description": "All other larceny reported.",
+        "source": "seed",
     },
     {
         "id": 13,
@@ -184,6 +212,7 @@ CRIMES: list[dict] = [
         "lng": -115.1398,
         "time": "2026-07-26",
         "description": "Assault reported; suspect description released by LVMPD.",
+        "source": "seed",
     },
     {
         "id": 14,
@@ -194,6 +223,7 @@ CRIMES: list[dict] = [
         "lng": -115.1400,
         "time": "2026-07-12",
         "description": "Commercial burglary under investigation.",
+        "source": "seed",
     },
     {
         "id": 15,
@@ -204,12 +234,17 @@ CRIMES: list[dict] = [
         "lng": -115.2700,
         "time": "2026-07-23",
         "description": "Fatal traffic collision investigated as Fatal #67.",
+        "source": "seed",
     },
 ]
 
-LIVE_CRIMES: list[dict] = list(CRIMES)
-_next_id = 100
+LIVE_CRIMES: list[dict] = list(SEED_CRIMES)
+_next_id = 1000
 _lock = threading.Lock()
+_data_source = "seed"  # "seed" | "lvmpd-arcgis" | "mixed"
+_last_poll_ok: datetime | None = None
+_last_poll_error: str | None = None
+_poller_started = False
 
 NEW_CRIME_POOL = [
     {
@@ -263,9 +298,37 @@ NEW_CRIME_POOL = [
     },
 ]
 
+# Map LVMPD Classification / type strings → our crime types
+TYPE_MAP = [
+    ("HOMICIDE", "homicide"),
+    ("MURDER", "homicide"),
+    ("SHOOTING", "shooting"),
+    ("GUNSHOT", "shooting"),
+    ("ROBBERY", "robbery"),
+    ("ASSAULT", "assault"),
+    ("BATTERY", "assault"),
+    ("FIGHT", "assault"),
+    ("BURGLARY", "burglary"),
+    ("B&E", "burglary"),
+    ("LARCENY", "theft"),
+    ("THEFT", "theft"),
+    ("STOLEN", "theft"),
+    ("VEHICLE THEFT", "theft"),
+    ("VANDALISM", "vandalism"),
+    ("GRAFFITI", "vandalism"),
+]
+
+
+def classify_type(raw: str) -> str:
+    upper = (raw or "").upper()
+    for key, mapped in TYPE_MAP:
+        if key in upper:
+            return mapped
+    return "other"
+
 
 def add_simulated_crime() -> dict:
-    """Add a new simulated incident to the live feed."""
+    """Add a new simulated incident (demo button)."""
     global _next_id
     template = random.choice(NEW_CRIME_POOL)
     now = datetime.now()
@@ -274,10 +337,195 @@ def add_simulated_crime() -> dict:
             "id": _next_id,
             **template,
             "time": now.strftime("%Y-%m-%d %H:%M"),
+            "source": "simulated",
         }
         _next_id += 1
         LIVE_CRIMES.insert(0, crime)
     return crime
+
+
+# ---------------------------------------------------------------------------
+# LVMPD ArcGIS poller
+# ---------------------------------------------------------------------------
+
+def fetch_lvmpd_cfs(limit: int = POLL_LIMIT) -> list[dict]:
+    """
+    Query LVMPD ArcGIS Calls-for-Service FeatureServer.
+    Returns normalized crime-like dicts. Raises on network/HTTP errors.
+    """
+    params = {
+        "where": "1=1",
+        "outFields": "*",
+        "returnGeometry": "true",
+        "orderByFields": "OBJECTID DESC",
+        "resultRecordCount": str(limit),
+        "f": "geojson",
+    }
+    url = ARCGIS_QUERY_URL + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "VegasCrimeWatcher/1.0 (educational demo)"},
+    )
+    with urllib.request.urlopen(req, timeout=45) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+
+    features = payload.get("features") or []
+    crimes: list[dict] = []
+
+    for feat in features:
+        props = feat.get("properties") or {}
+        geom = feat.get("geometry") or {}
+        coords = geom.get("coordinates") or [None, None]
+        lng, lat = (coords + [None, None])[:2]
+
+        incident_id = (
+            props.get("incidentnumber")
+            or props.get("IncidentNumber")
+            or props.get("EVENT_NUMBER")
+            or props.get("OBJECTID")
+        )
+        classification = (
+            props.get("Classification")
+            or props.get("classification")
+            or props.get("Type")
+            or props.get("type")
+            or props.get("CallType")
+            or props.get("FinalType")
+            or ""
+        )
+        address = (
+            props.get("address")
+            or props.get("Address")
+            or props.get("LOCATION")
+            or props.get("Location")
+            or props.get("BlockAddress")
+            or ""
+        )
+        time_raw = (
+            props.get("timedispatch")
+            or props.get("TimeDispatch")
+            or props.get("CreateDate")
+            or props.get("DATE")
+            or props.get("CallDate")
+            or ""
+        )
+        if isinstance(time_raw, (int, float)) and time_raw > 1e11:
+            try:
+                time_str = datetime.utcfromtimestamp(time_raw / 1000).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            except (OSError, ValueError, OverflowError):
+                time_str = str(time_raw)
+        else:
+            time_str = str(time_raw) if time_raw else ""
+
+        if lat is None or lng is None:
+            lat = props.get("Latitude") or props.get("lat") or props.get("Y")
+            lng = props.get("Longitude") or props.get("lng") or props.get("X")
+
+        try:
+            lat_f = float(lat) if lat is not None else None
+            lng_f = float(lng) if lng is not None else None
+        except (TypeError, ValueError):
+            lat_f, lng_f = None, None
+
+        if lat_f is None or lng_f is None:
+            continue
+        if not (35.8 < lat_f < 36.5 and -115.6 < lng_f < -114.7):
+            continue
+
+        ctype = classify_type(str(classification))
+        title = str(classification).strip() or "Call for service"
+
+        crimes.append(
+            {
+                "id": f"lvmpd-{incident_id}",
+                "type": ctype,
+                "title": title,
+                "address": str(address).strip() or "Las Vegas area",
+                "lat": round(lat_f, 5),
+                "lng": round(lng_f, 5),
+                "time": time_str,
+                "description": f"LVMPD Call for Service: {title}",
+                "source": "lvmpd-arcgis",
+            }
+        )
+
+    return crimes
+
+
+def merge_live_crimes(incoming: list[dict]) -> int:
+    """
+    Merge incoming ArcGIS records into LIVE_CRIMES.
+    Dedupes by id. Returns count of newly added items.
+    """
+    global _data_source
+    with _lock:
+        existing_ids = {str(c.get("id")) for c in LIVE_CRIMES}
+        added = 0
+        for crime in incoming:
+            cid = str(crime.get("id"))
+            if cid in existing_ids:
+                continue
+            LIVE_CRIMES.insert(0, crime)
+            existing_ids.add(cid)
+            added += 1
+
+        if len(LIVE_CRIMES) > 500:
+            del LIVE_CRIMES[500:]
+
+        sources = {c.get("source") for c in LIVE_CRIMES}
+        if "lvmpd-arcgis" in sources and "seed" in sources:
+            _data_source = "mixed"
+        elif "lvmpd-arcgis" in sources:
+            _data_source = "lvmpd-arcgis"
+        else:
+            _data_source = "seed"
+
+    return added
+
+
+def poll_once() -> None:
+    """Single poll attempt; updates status globals."""
+    global _last_poll_ok, _last_poll_error
+    try:
+        fetched = fetch_lvmpd_cfs()
+        added = merge_live_crimes(fetched)
+        _last_poll_ok = datetime.now()
+        _last_poll_error = None
+        print(
+            f"[{_last_poll_ok.strftime('%H:%M:%S')}] "
+            f"ArcGIS poll OK — {len(fetched)} records, {added} new"
+        )
+    except urllib.error.HTTPError as e:
+        _last_poll_error = f"HTTP {e.code}: {e.reason}"
+        print(f"[poll] ArcGIS HTTP error: {_last_poll_error}")
+    except urllib.error.URLError as e:
+        _last_poll_error = f"URL error: {e.reason}"
+        print(f"[poll] ArcGIS URL error: {_last_poll_error}")
+    except Exception as e:  # noqa: BLE001
+        _last_poll_error = str(e)
+        print(f"[poll] ArcGIS error: {_last_poll_error}")
+
+
+def _poller_loop() -> None:
+    time.sleep(2)
+    while True:
+        poll_once()
+        time.sleep(POLL_INTERVAL_SEC)
+
+
+def start_poller() -> None:
+    global _poller_started
+    if _poller_started:
+        return
+    _poller_started = True
+    t = threading.Thread(target=_poller_loop, name="lvmpd-poller", daemon=True)
+    t.start()
+    print(
+        f"LVMPD ArcGIS poller started "
+        f"(every {POLL_INTERVAL_SEC}s, limit={POLL_LIMIT})"
+    )
 
 
 def render_html() -> str:
@@ -320,7 +568,36 @@ class CrimeHandler(BaseHTTPRequestHandler):
                 self._send_json(LIVE_CRIMES)
 
         elif path == "/api/health":
-            self._send_json({"status": "ok", "crimes": len(LIVE_CRIMES)})
+            with _lock:
+                count = len(LIVE_CRIMES)
+            self._send_json(
+                {
+                    "status": "ok",
+                    "crimes": count,
+                    "source": _data_source,
+                    "last_poll_ok": (
+                        _last_poll_ok.isoformat(timespec="seconds")
+                        if _last_poll_ok
+                        else None
+                    ),
+                    "last_poll_error": _last_poll_error,
+                    "poll_interval_sec": POLL_INTERVAL_SEC,
+                }
+            )
+
+        elif path == "/api/source":
+            self._send_json(
+                {
+                    "source": _data_source,
+                    "last_poll_ok": (
+                        _last_poll_ok.isoformat(timespec="seconds")
+                        if _last_poll_ok
+                        else None
+                    ),
+                    "last_poll_error": _last_poll_error,
+                    "endpoint": ARCGIS_QUERY_URL,
+                }
+            )
 
         else:
             self.send_error(404, "Not Found")
@@ -330,6 +607,18 @@ class CrimeHandler(BaseHTTPRequestHandler):
         if path == "/api/simulate":
             crime = add_simulated_crime()
             self._send_json(crime, status=201)
+        elif path == "/api/poll":
+            poll_once()
+            with _lock:
+                count = len(LIVE_CRIMES)
+            self._send_json(
+                {
+                    "ok": _last_poll_error is None,
+                    "source": _data_source,
+                    "crimes": count,
+                    "error": _last_poll_error,
+                }
+            )
         else:
             self.send_error(404, "Not Found")
 
@@ -338,13 +627,17 @@ def run(host: str = "127.0.0.1", port: int = 8080) -> None:
     if not TEMPLATE_PATH.exists():
         raise SystemExit(f"Template not found: {TEMPLATE_PATH}")
 
+    start_poller()
+
     server = HTTPServer((host, port), CrimeHandler)
     print(f"🚨 Vegas Crime Watcher running at http://{host}:{port}")
     print("   Endpoints:")
     print("     GET  /              → full interactive UI")
     print("     GET  /api/crimes    → JSON crime list")
+    print("     GET  /api/health    → health + poll status")
+    print("     GET  /api/source    → data source info")
     print("     POST /api/simulate  → add simulated incident")
-    print("     GET  /api/health    → health check")
+    print("     POST /api/poll      → force ArcGIS poll now")
     print("   Press Ctrl+C to stop\n")
     try:
         server.serve_forever()
