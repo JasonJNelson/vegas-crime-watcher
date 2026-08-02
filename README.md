@@ -7,20 +7,23 @@ Complete working interactive Las Vegas crime map and live-style incident feed.
 ## Features
 
 - Interactive dark Leaflet map centered on Las Vegas
-- Color-coded markers by crime type (homicide, shooting, robbery, assault, burglary, theft, vandalism)
+- Color-coded markers by crime type
 - Filterable crime feed
-- Live simulation (`POST /api/simulate`)
+- **LVMPD ArcGIS live poller** — pulls real Calls-for-Service data
+- Seed data fallback when ArcGIS is unreachable
 - Login / Subscribe modals (demo)
-- Pricing tiers UI ($0 / $9.99 / $29.99)
-- REST API:
-  - `GET /` — full web UI
-  - `GET /api/crimes` — current crime list (JSON)
-  - `POST /api/simulate` — add a new simulated incident
-  - `GET /api/health` — health check
+- Pricing tiers UI
+- REST API
 
-## Requirements
+## Data sources
 
-- Python 3.9+
+| Source | Description |
+|--------|-------------|
+| **LVMPD ArcGIS** | Public Feature Service: Calls for Service (CAD). Polled every 10 minutes. |
+| **Seed** | Illustrative incidents from public LVMPD press / local reporting (July 2026) |
+| **Simulated** | Demo "+" button / `POST /api/simulate` |
+
+CFS records are **calls for service**, not always confirmed crimes. The app maps classifications into homicide / shooting / robbery / assault / burglary / theft / vandalism / other.
 
 ## Run
 
@@ -30,23 +33,39 @@ python app.py
 
 Open **http://127.0.0.1:8080**
 
+## API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Full interactive UI |
+| GET | `/api/crimes` | Current crime list (JSON) |
+| GET | `/api/health` | Health + poll status |
+| GET | `/api/source` | Data source + ArcGIS endpoint |
+| POST | `/api/simulate` | Add a simulated incident |
+| POST | `/api/poll` | Force an ArcGIS poll now |
+
 ## Project layout
 
 ```
 vegas-crime-watcher/
-├── app.py                  # server + crime data + API
+├── app.py                  # server + ArcGIS poller + seed data
 ├── templates/
-│   └── index.html          # full interactive front-end
+│   └── index.html          # interactive front-end
 ├── README.md
 └── requirements.txt
 ```
 
-## Data notes
+## Config (in `app.py`)
 
-Incident data is illustrative and drawn from public LVMPD press releases and local reporting (July 2026).  
-This is a **demo / educational** project — not an official police product.
+- `POLL_INTERVAL_SEC` — default `600` (10 min)
+- `POLL_LIMIT` — max CFS records per poll (default `150`)
+- `ARCGIS_QUERY_URL` — LVMPD FeatureServer query endpoint
 
-Always call **911** for emergencies.
+## Notes
+
+- This is a **demo / educational** project — not an official police product.
+- LVMPD does not guarantee completeness of open data.
+- Always call **911** for emergencies.
 
 ## License
 
