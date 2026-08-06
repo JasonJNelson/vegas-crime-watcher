@@ -19,8 +19,6 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
 COPY --chown=appuser:appuser requirements.txt .
 
 # --- Layer 3: install deps with BuildKit cache mount ---
-# Stdlib-only today (no packages), but this stays warm if you add deps later.
-# Railway supports cache mounts; for service-specific IDs see Railway docs.
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     if [ -s requirements.txt ] && grep -vE '^\s*(#|$)' requirements.txt | grep -q .; then \
       pip install --no-cache-dir -r requirements.txt; \
@@ -37,6 +35,6 @@ USER appuser
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8080')+'/api/health', timeout=3)"
+  CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8080')+'/health', timeout=3)"
 
 CMD ["python", "app.py"]
