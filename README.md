@@ -2,119 +2,47 @@
 
 [![CI](https://github.com/JasonJNelson/vegas-crime-watcher/actions/workflows/ci.yml/badge.svg)](https://github.com/JasonJNelson/vegas-crime-watcher/actions/workflows/ci.yml)
 
-Complete working interactive Las Vegas crime map and live-style incident feed.
+Interactive Las Vegas crime map and feed.
 
-**Pure Python — zero external dependencies** (stdlib only).
+- **Local / Railway / Docker:** long-running pure-Python server (`app.py`)
+- **Vercel:** static UI + serverless Python APIs
 
-## Features
-
-- Interactive Leaflet map centered on Las Vegas (light basemap)
-- Color-coded markers by crime type
-- Filterable crime feed
-- **LVMPD ArcGIS live poller** — pulls real Calls-for-Service data
-- Seed data fallback when ArcGIS is unreachable
-- Login / Subscribe modals (demo)
-- Pricing tiers UI
-- REST API
-
-## Data sources
-
-| Source | Description |
-|--------|-------------|
-| **LVMPD ArcGIS** | Public Feature Service: Calls for Service (CAD). Polled every 10 minutes. |
-| **Seed** | Illustrative incidents from public LVMPD press / local reporting (July 2026) |
-| **Simulated** | Demo "+" button / `POST /api/simulate` |
-
-CFS records are **calls for service**, not always confirmed crimes.
-
-## Run (local)
+## Run locally
 
 ```bash
 python app.py
-# → http://127.0.0.1:8080
+# → http://127.0.0.1:8080  (localhost only by default)
 ```
 
-## Docker
+## Deploy on Vercel (public URL)
 
-Railway uses the `Dockerfile` when present (`railway.toml` sets `builder = "DOCKERFILE"`).
+1. Open [vercel.com/new](https://vercel.com/new)
+2. Import **JasonJNelson/vegas-crime-watcher**
+3. Deploy (defaults are fine)
+4. Open the URL Vercel prints (e.g. `https://vegas-crime-watcher.vercel.app`)
 
-### Build & run locally
+CLI:
 
 ```bash
-docker build -t vegas-crime-watcher .
-docker run --rm -p 8080:8080 -e PORT=8080 vegas-crime-watcher
-# → http://localhost:8080
+npm i -g vercel
+vercel login
+vercel --prod
 ```
 
-Or with Compose:
+| Path | Runtime |
+|------|---------|
+| `/` | Static `public/index.html` |
+| `/api/crimes` | Serverless (seed + on-demand ArcGIS) |
+| `/api/health` | Serverless |
+| `/api/simulate` | Serverless |
 
-```bash
-docker compose up --build
-```
+## Deploy on Railway
 
-Image notes:
+Use `Dockerfile` / `railway.toml`. Background ArcGIS poller runs there.
 
-- Base: `python:3.12-slim-bookworm`
-- No `pip install` (stdlib only)
-- Non-root user `appuser`
-- `HEALTHCHECK` → `/api/health`
-- Listens on `0.0.0.0:$PORT`
+## Security
 
-### Railway + Docker
-
-1. Push this repo (Dockerfile is on `main`).
-2. **New Project → Deploy from GitHub** → select the repo.
-3. Railway builds from `Dockerfile`.
-4. **Settings → Networking → Generate Domain**.
-
-If it still uses Nixpacks, set:
-`RAILWAY_DOCKERFILE_PATH=Dockerfile`
-or **Settings → Build → Builder → Dockerfile**.
-
-## Deploy (Railway)
-
-1. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
-2. Select **JasonJNelson/vegas-crime-watcher**.
-3. App binds to `0.0.0.0:$PORT` (Railway injects `PORT`).
-4. Generate a public domain under **Networking**.
-5. Health: `GET /api/health`
-
-## API
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Full interactive UI |
-| GET | `/api/crimes` | Current crime list (JSON) |
-| GET | `/api/health` | Health + poll status |
-| GET | `/api/source` | Data source + ArcGIS endpoint |
-| POST | `/api/simulate` | Add a simulated incident |
-| POST | `/api/poll` | Force an ArcGIS poll now |
-
-## Project layout
-
-```
-vegas-crime-watcher/
-├── app.py
-├── templates/index.html
-├── Dockerfile
-├── docker-compose.yml
-├── .dockerignore
-├── railway.toml
-├── Procfile
-├── tests/
-└── .github/workflows/ci.yml
-```
-
-## CI
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-## Notes
-
-- Demo / educational — not an official police product.
-- Always call **911** for emergencies.
+Local default bind is `127.0.0.1`. Public bind when `PORT` is set (Railway) or `ALLOW_PUBLIC=1`.
 
 ## License
 
