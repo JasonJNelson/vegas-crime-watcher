@@ -57,6 +57,7 @@ vegas-crime-watcher/
 │   └── test_app.py         # unit tests
 ├── .github/workflows/
 │   └── ci.yml              # GitHub Actions CI
+├── Procfile / railway.toml # Railway deploy
 ├── README.md
 └── requirements.txt
 ```
@@ -66,6 +67,16 @@ vegas-crime-watcher/
 - `POLL_INTERVAL_SEC` — default `600` (10 min)
 - `POLL_LIMIT` — max CFS records per poll (default `150`)
 - `ARCGIS_QUERY_URL` — LVMPD FeatureServer query endpoint
+- `PORT` / `HOST` — env vars used on Railway (default `0.0.0.0:8080`)
+
+## Deploy (Railway)
+
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
+2. Select **JasonJNelson/vegas-crime-watcher**.
+3. Railway detects Python (Nixpacks) and runs `python app.py`.
+4. App binds to `0.0.0.0:$PORT` (Railway sets `PORT`).
+5. **Settings → Networking → Generate Domain** for a public URL.
+6. Health check: `GET /api/health`
 
 ## CI
 

@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["python312"]
+
+[phases.install]
+cmds = ["echo 'stdlib only — no pip install'"]
+
+[start]
+cmd = "python app.py"
