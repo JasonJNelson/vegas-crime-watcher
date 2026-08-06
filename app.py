@@ -290,17 +290,46 @@ class CrimeHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
 
 
+def _resolve_bind(host: str | None, port: int | None) -> tuple[str, int]:
+    """
+    Bind policy (prevent accidental LAN exposure):
+      - Default host: 127.0.0.1 (localhost only)
+      - Public bind 0.0.0.0 when Railway sets PORT, or ALLOW_PUBLIC=1, or HOST is set
+      - Explicit HOST always wins when provided via env or argument
+    """
+    env_port = os.environ.get("PORT")
+    allow_public = os.environ.get("ALLOW_PUBLIC", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    railway_like = env_port is not None  # Railway injects PORT
+
+    if port is None:
+        port = int(env_port) if env_port else 8080
+
+    if host is not None:
+        return host, port
+
+    env_host = os.environ.get("HOST")
+    if env_host:
+        return env_host, port
+
+    if allow_public or railway_like:
+        return "0.0.0.0", port
+
+    return "127.0.0.1", port
+
+
 def run(host: str | None = None, port: int | None = None) -> None:
     if not TEMPLATE_PATH.exists():
         raise SystemExit(f"Template not found: {TEMPLATE_PATH}")
 
-    host = host or os.environ.get("HOST", "0.0.0.0")
-    port = port or int(os.environ.get("PORT", "8080"))
+    host, port = _resolve_bind(host, port)
 
     start_poller()
 
     server = HTTPServer((host, port), CrimeHandler)
-    print(f"🚨 Vegas Crime Watcher running at http://{host}:{port}")
+    scope = "localhost only" if host in ("127.0.0.1", "localhost") else "all interfaces"
+    print(f"🚨 Vegas Crime Watcher running at http://{host}:{port}  ({scope})")
     print("   Endpoints:")
     print("     GET  /              → full interactive UI")
     print("     GET  /health        → health check (also /healthz, /api/health)")
