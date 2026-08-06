@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vegas Crime Watcher | Live Las Vegas Crime Map & Feed</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0f14; --surface: #12181f; --surface2: #1a222d; --border: #2a3544;
+      --text: #e8eef6; --muted: #8b9bb0; --accent: #ff3b4a; --accent2: #ff6b35;
+      --green: #22c55e; --blue: #3b82f6; --yellow: #eab308; --purple: #a855f7; --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+    header { position: sticky; top: 0; z-index: 1000; background: rgba(11,15,20,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .logo { display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.25rem; }
+    .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: grid; place-items: center; }
+    .live-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,59,74,0.15); color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,59,74,0.35); }
+    .live-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    .btn { font-family: inherit; font-weight: 600; font-size: 0.875rem; border: none; border-radius: 8px; padding: 0.55rem 1.1rem; cursor: pointer; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), #e11d48); color: white; }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; padding: 1.25rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .stat-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.9rem 1rem; text-align: center; }
+    .stat-value { font-size: 1.5rem; font-weight: 800; }
+    .stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; }
+    .main { display: grid; grid-template-columns: 1fr 380px; min-height: calc(100vh - 180px); }
+    @media (max-width: 960px) { .main { grid-template-columns: 1fr; } .sidebar { order: -1; max-height: 420px; } }
+    .map-section { position: relative; display: flex; flex-direction: column; }
+    #map { flex: 1; min-height: 480px; background: #e8eef4; }
+    .map-overlay { position: absolute; top: 12px; left: 12px; z-index: 500; display: flex; flex-direction: column; gap: 8px; }
+    .filter-chip { background: rgba(18,24,31,0.92); border: 1px solid var(--border); color: var(--text); font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+    .filter-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+    .sidebar { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    .sidebar-header { padding: 1rem 1.15rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .feed { flex: 1; overflow-y: auto; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.6rem; }
+    .crime-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; cursor: pointer; }
+    .crime-type { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+    .type-homicide { color: var(--accent); } .type-shooting { color: #f97316; } .type-robbery { color: var(--yellow); }
+    .type-assault { color: #f43f5e; } .type-burglary { color: var(--blue); } .type-theft { color: #38bdf8; }
+    .type-vandalism { color: var(--purple); } .type-other { color: var(--muted); }
+    .crime-title { font-weight: 600; font-size: 0.9rem; }
+    .crime-meta { font-size: 0.75rem; color: var(--muted); }
+    .pricing { padding: 3rem 1.5rem; border-top: 1px solid var(--border); }
+    .section-title { text-align: center; font-size: 1.75rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .section-sub { text-align: center; color: var(--muted); margin-bottom: 2rem; }
+    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; max-width: 960px; margin: 0 auto; }
+    .price-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.75rem; }
+    .price-card.featured { border-color: var(--accent); }
+    .price-amount { font-size: 2.4rem; font-weight: 800; margin: 0.5rem 0; }
+    .price-amount span { font-size: 0.95rem; color: var(--muted); }
+    footer { padding: 1.5rem; text-align: center; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
+    .leaflet-popup-content-wrapper { background: var(--surface2) !important; color: var(--text) !important; border-radius: 10px !important; }
+    .custom-marker { width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+    .icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo"><div class="logo-icon">🚨</div><span>Vegas Crime Watcher</span>
+      <span class="live-badge"><span class="live-dot"></span> Live</span></div>
+    <nav>
+      <button class="btn btn-ghost" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</button>
+      <button class="btn btn-outline" onclick="alert('Demo login only')">Log In</button>
+      <button class="btn btn-primary" onclick="alert('Demo subscribe only')">Subscribe</button>
+    </nav>
+  </header>
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-value">~36.2k</div><div class="stat-label">Incidents (30 days)</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent)">272</div><div class="stat-label">Shootings</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:#f43f5e">14.2k</div><div class="stat-label">Assaults</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--yellow)">211</div><div class="stat-label">Robberies</div></div>
+  </div>
+  <div class="main">
+    <section class="map-section">
+      <div class="map-overlay">
+        <button class="filter-chip active" onclick="setFilter('all', this)">All</button>
+        <button class="filter-chip" onclick="setFilter('homicide', this)">Homicide</button>
+        <button class="filter-chip" onclick="setFilter('shooting', this)">Shooting</button>
+        <button class="filter-chip" onclick="setFilter('robbery', this)">Robbery</button>
+        <button class="filter-chip" onclick="setFilter('assault', this)">Assault</button>
+        <button class="filter-chip" onclick="setFilter('burglary', this)">Burglary</button>
+        <button class="filter-chip" onclick="setFilter('theft', this)">Theft</button>
+      </div>
+      <div id="map"></div>
+    </section>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2 style="font-size:0.95rem">Crime Feed</h2>
+        <div><button class="icon-btn" onclick="refreshFeed()">↻</button>
+        <button class="icon-btn" onclick="simulateNewCrime()">＋</button></div>
+      </div>
+      <div class="feed" id="feed"></div>
+    </aside>
+  </div>
+  <section class="pricing" id="pricing">
+    <h2 class="section-title">Stay Ahead of the Streets</h2>
+    <p class="section-sub">Demo pricing — not a real subscription service.</p>
+    <div class="pricing-grid">
+      <div class="price-card"><div>Free Watcher</div><div class="price-amount">$0 <span>/mo</span></div></div>
+      <div class="price-card featured"><div>Neighborhood Pro</div><div class="price-amount">$9.99 <span>/mo</span></div></div>
+      <div class="price-card"><div>Business / Fleet</div><div class="price-amount">$29.99 <span>/mo</span></div></div>
+    </div>
+  </section>
+  <footer><p>Vegas Crime Watcher · Demo. Not an official police product. Call 911 for emergencies.</p></footer>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let crimes = [];
+    let currentFilter = 'all';
+    let map, markersLayer;
+    const typeColors = {
+      homicide: '#ff3b4a', shooting: '#f97316', robbery: '#eab308', assault: '#f43f5e',
+      burglary: '#3b82f6', theft: '#38bdf8', vandalism: '#a855f7', other: '#8b9bb0'
+    };
+    function initMap() {
+      map = L.map('map', { center: [36.1699, -115.1398], zoom: 11 });
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxZoom: 19
+      }).addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+    }
+    function createIcon(type) {
+      const color = typeColors[type] || typeColors.other;
+      return L.divIcon({ className: '', html: `<div class="custom-marker" style="background:${color}"></div>`, iconSize: [28,28], iconAnchor: [14,14] });
+    }
+    function renderMarkers() {
+      markersLayer.clearLayers();
+      const filtered = currentFilter === 'all' ? crimes : crimes.filter(c => c.type === currentFilter);
+      filtered.forEach(c => {
+        if (c.lat == null || c.lng == null) return;
+        L.marker([c.lat, c.lng], { icon: createIcon(c.type) })
+          .bindPopup(`<strong style="color:${typeColors[c.type]}">${(c.type||'').toUpperCase()}</strong><br><b>${c.title||''}</b><br>${c.address||''}<br><small>${c.time||''}</small>`)
+          .addTo(markersLayer);
+      });
+    }
+    function setFilter(type, btn) {
+      currentFilter = type;
+      document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderMarkers(); renderFeed();
+    }
+    function renderFeed() {
+      const feed = document.getElementById('feed');
+      const filtered = (currentFilter === 'all' ? [...crimes] : crimes.filter(c => c.type === currentFilter));
+      feed.innerHTML = filtered.map(c => `
+        <div class="crime-card" onclick="map.setView([${c.lat},${c.lng}],14)">
+          <div class="crime-type type-${c.type}">${c.type||''}</div>
+          <div class="crime-title">${c.title||''}</div>
+          <div class="crime-meta">${c.address||''} · ${c.time||''}</div>
+        </div>`).join('') || '<p style="color:var(--muted);padding:1rem">Loading incidents…</p>';
+    }
+    function refreshFeed() {
+      fetch('/api/crimes').then(r => r.json()).then(data => {
+        crimes = data; renderMarkers(); renderFeed();
+      }).catch(err => console.error(err));
+    }
+    function simulateNewCrime() {
+      fetch('/api/simulate', { method: 'POST' }).then(r => r.json()).then(crime => {
+        crimes.unshift(crime); renderMarkers(); renderFeed();
+      }).catch(() => alert('Simulate needs /api/simulate'));
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      initMap(); renderFeed(); refreshFeed();
+    });
+  </script>
+</body>
+</html>
