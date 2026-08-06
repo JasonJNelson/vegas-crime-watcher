@@ -7,7 +7,8 @@
     { "source": "/healthz", "destination": "/api/health" },
     { "source": "/api/health", "destination": "/api/health" },
     { "source": "/api/crimes", "destination": "/api/crimes" },
-    { "source": "/api/simulate", "destination": "/api/simulate" }
+    { "source": "/api/simulate", "destination": "/api/simulate" },
+    { "source": "/api/poll", "destination": "/api/poll" }
   ],
   "headers": [
     {
@@ -15,6 +16,12 @@
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/poll",
+      "schedule": "0 14 * * *"
     }
   ],
   "functions": {
