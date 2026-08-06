@@ -8,7 +8,6 @@ import pathlib
 import unittest
 from unittest import mock
 
-# Project root is parent of tests/
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 import sys
 
@@ -61,50 +60,36 @@ class TestSimulate(unittest.TestCase):
 
 class TestMerge(unittest.TestCase):
     def test_dedupe(self) -> None:
-        incoming = [
-            {
-                "id": "lvmpd-test-1",
-                "type": "theft",
-                "title": "Test",
-                "address": "Somewhere",
-                "lat": 36.17,
-                "lng": -115.14,
-                "time": "2026-08-01 12:00",
-                "description": "test",
-                "source": "lvmpd-arcgis",
-            }
-        ]
-        added1 = app.merge_live_crimes(incoming)
-        added2 = app.merge_live_crimes(incoming)
-        self.assertEqual(added1, 1)
-        self.assertEqual(added2, 0)
+        incoming = [{
+            "id": "lvmpd-test-1", "type": "theft", "title": "Test",
+            "address": "Somewhere", "lat": 36.17, "lng": -115.14,
+            "time": "2026-08-01 12:00", "description": "test", "source": "lvmpd-arcgis",
+        }]
+        self.assertEqual(app.merge_live_crimes(incoming), 1)
+        self.assertEqual(app.merge_live_crimes(incoming), 0)
 
 
 class TestFetchNormalization(unittest.TestCase):
     def test_fetch_parses_geojson(self) -> None:
         fake = {
-            "features": [
-                {
-                    "type": "Feature",
-                    "geometry": {"type": "Point", "coordinates": [-115.14, 36.17]},
-                    "properties": {
-                        "incidentnumber": "LLV999",
-                        "Classification": "Assault/Battery",
-                        "address": "100 Fremont St",
-                        "timedispatch": "2026-08-01 10:00",
-                    },
-                }
-            ]
+            "features": [{
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [-115.14, 36.17]},
+                "properties": {
+                    "incidentnumber": "LLV999",
+                    "Classification": "Assault/Battery",
+                    "address": "100 Fremont St",
+                    "timedispatch": "2026-08-01 10:00",
+                },
+            }]
         }
         payload = json.dumps(fake).encode("utf-8")
 
         class FakeResp:
             def __enter__(self):
                 return self
-
             def __exit__(self, *a):
                 return False
-
             def read(self):
                 return payload
 
@@ -128,6 +113,16 @@ class TestTemplate(unittest.TestCase):
         self.assertIn("leaflet", html)
         self.assertIn("light_all", html)
         self.assertIn("let crimes =", html)
+
+
+class TestHealth(unittest.TestCase):
+    def test_health_payload(self) -> None:
+        payload = app.health_payload()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["service"], "vegas-crime-watcher")
+        self.assertIn("crimes", payload)
+        self.assertIn("source", payload)
+        self.assertIn("poll_interval_sec", payload)
 
 
 if __name__ == "__main__":
