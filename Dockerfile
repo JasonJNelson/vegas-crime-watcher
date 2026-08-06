@@ -1,29 +1,41 @@
-# Vegas Crime Watcher — production image for Railway / any container host
-# Pure Python (stdlib only) → small image, no pip packages required.
+# syntax=docker/dockerfile:1.7
+# Vegas Crime Watcher — cache-optimized image for Railway / Docker
+# Layer order: base → user → deps (rare) → app code (frequent)
 
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm AS runtime
 
-# Avoid .pyc files and force unbuffered logs (better for Railway log stream)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOST=0.0.0.0 \
-    PORT=8080
+    PORT=8080 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Create non-root user (Railway runs as root by default, but this is safer elsewhere)
+# --- Layer 1: OS user (almost never changes) ---
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
 
-# Copy only what we need (layer-friendly; no pip install for this app)
-COPY --chown=appuser:appuser app.py requirements.txt ./
+# --- Layer 2: dependency metadata (changes only when packages change) ---
+COPY --chown=appuser:appuser requirements.txt .
+
+# --- Layer 3: install deps with BuildKit cache mount ---
+# Stdlib-only today (no packages), but this stays warm if you add deps later.
+# Railway supports cache mounts; for service-specific IDs see Railway docs.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    if [ -s requirements.txt ] && grep -vE '^\s*(#|$)' requirements.txt | grep -q .; then \
+      pip install --no-cache-dir -r requirements.txt; \
+    else \
+      echo "stdlib only — skipping pip install"; \
+    fi
+
+# --- Layer 4: application code (changes most often → last) ---
+COPY --chown=appuser:appuser app.py .
 COPY --chown=appuser:appuser templates/ templates/
 
 USER appuser
 
-# Document the port (Railway injects $PORT at runtime)
 EXPOSE 8080
 
-# Healthcheck for local docker / orchestrators that honor HEALTHCHECK
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8080')+'/api/health', timeout=3)"
 

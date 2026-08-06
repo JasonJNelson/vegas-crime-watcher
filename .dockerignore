@@ -1,12 +1,13 @@
-# Git / IDE
+# VCS / IDE
 .git
 .gitignore
 .github
 .vscode
 .idea
 
-# Python junk
+# Python caches & virtualenvs
 __pycache__
+**/__pycache__
 *.py[cod]
 *$py.class
 .Python
@@ -17,23 +18,26 @@ env
 .pytest_cache
 .mypy_cache
 .ruff_cache
+.coverage
+htmlcov
 
-# Tests & docs (not needed at runtime)
+# Tests — not needed in the runtime image
 tests
-*.md
-!README.md
+**/test_*.py
 
-# Local / deploy meta
+# Docs & local tooling (keep context small → faster uploads)
+*.md
+LICENSE
 Procfile
 railway.toml
 nixpacks.toml
 runtime.txt
 docker-compose*.yml
 .dockerignore
-Dockerfile*
 
-# Misc
+# Build artifacts / logs
 *.log
 .DS_Store
 tmp
 artifacts
+__pycache__
