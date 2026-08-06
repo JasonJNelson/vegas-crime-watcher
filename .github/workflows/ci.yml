@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Syntax check
+        run: python -m py_compile app.py
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Smoke test HTTP server
+        run: |
+          python app.py &
+          PID=$!
+          sleep 4
+          curl -sf http://127.0.0.1:8080/api/health | python -m json.tool
+          curl -sf -o /dev/null -w "homepage %{http_code}\n" http://127.0.0.1:8080/
+          curl -sf http://127.0.0.1:8080/api/crimes | python -c "import sys,json; d=json.load(sys.stdin); assert len(d)>=15; print(f'crimes={len(d)}')"
+          kill $PID
+
+  arcgis:
+    name: ArcGIS poller (optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true  # network/API outages should not fail the whole CI
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Live ArcGIS fetch
+        run: |
+          python -c "
+          import app
+          rows = app.fetch_lvmpd_cfs(limit=10)
+          print(f'fetched={len(rows)}')
+          assert isinstance(rows, list)
+          if rows:
+              r = rows[0]
+              assert 'lat' in r and 'lng' in r and 'type' in r
+              print('sample:', r.get('type'), r.get('title', '')[:50])
+          print('OK')
+          "

@@ -1,12 +1,14 @@
 # Vegas Crime Watcher
 
+[![CI](https://github.com/JasonJNelson/vegas-crime-watcher/actions/workflows/ci.yml/badge.svg)](https://github.com/JasonJNelson/vegas-crime-watcher/actions/workflows/ci.yml)
+
 Complete working interactive Las Vegas crime map and live-style incident feed.
 
 **Pure Python — zero external dependencies** (stdlib only).
 
 ## Features
 
-- Interactive dark Leaflet map centered on Las Vegas
+- Interactive Leaflet map centered on Las Vegas (light basemap)
 - Color-coded markers by crime type
 - Filterable crime feed
 - **LVMPD ArcGIS live poller** — pulls real Calls-for-Service data
@@ -51,6 +53,10 @@ vegas-crime-watcher/
 ├── app.py                  # server + ArcGIS poller + seed data
 ├── templates/
 │   └── index.html          # interactive front-end
+├── tests/
+│   └── test_app.py         # unit tests
+├── .github/workflows/
+│   └── ci.yml              # GitHub Actions CI
 ├── README.md
 └── requirements.txt
 ```
@@ -60,6 +66,19 @@ vegas-crime-watcher/
 - `POLL_INTERVAL_SEC` — default `600` (10 min)
 - `POLL_LIMIT` — max CFS records per poll (default `150`)
 - `ARCGIS_QUERY_URL` — LVMPD FeatureServer query endpoint
+
+## CI
+
+GitHub Actions runs on every push and PR to `main`:
+
+- Syntax check (`py_compile`)
+- Unit tests (`python -m unittest`)
+- Smoke test of the HTTP server
+- Optional live ArcGIS poll (non-blocking)
+
+```bash
+python -m unittest discover -s tests -v
+```
 
 ## Notes
 
