@@ -10,6 +10,7 @@ Zero external dependencies.
 from __future__ import annotations
 
 import json
+import os
 import random
 import threading
 import time
@@ -298,7 +299,6 @@ NEW_CRIME_POOL = [
     },
 ]
 
-# Map LVMPD Classification / type strings → our crime types
 TYPE_MAP = [
     ("HOMICIDE", "homicide"),
     ("MURDER", "homicide"),
@@ -328,7 +328,6 @@ def classify_type(raw: str) -> str:
 
 
 def add_simulated_crime() -> dict:
-    """Add a new simulated incident (demo button)."""
     global _next_id
     template = random.choice(NEW_CRIME_POOL)
     now = datetime.now()
@@ -344,15 +343,7 @@ def add_simulated_crime() -> dict:
     return crime
 
 
-# ---------------------------------------------------------------------------
-# LVMPD ArcGIS poller
-# ---------------------------------------------------------------------------
-
 def fetch_lvmpd_cfs(limit: int = POLL_LIMIT) -> list[dict]:
-    """
-    Query LVMPD ArcGIS Calls-for-Service FeatureServer.
-    Returns normalized crime-like dicts. Raises on network/HTTP errors.
-    """
     params = {
         "where": "1=1",
         "outFields": "*",
@@ -455,10 +446,6 @@ def fetch_lvmpd_cfs(limit: int = POLL_LIMIT) -> list[dict]:
 
 
 def merge_live_crimes(incoming: list[dict]) -> int:
-    """
-    Merge incoming ArcGIS records into LIVE_CRIMES.
-    Dedupes by id. Returns count of newly added items.
-    """
     global _data_source
     with _lock:
         existing_ids = {str(c.get("id")) for c in LIVE_CRIMES}
@@ -486,7 +473,6 @@ def merge_live_crimes(incoming: list[dict]) -> int:
 
 
 def poll_once() -> None:
-    """Single poll attempt; updates status globals."""
     global _last_poll_ok, _last_poll_error
     try:
         fetched = fetch_lvmpd_cfs()
@@ -529,16 +515,11 @@ def start_poller() -> None:
 
 
 def render_html() -> str:
-    """Load the HTML template and inject current crime data."""
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     with _lock:
         crimes_json = json.dumps(LIVE_CRIMES)
     return template.replace("__CRIMES_JSON__", crimes_json)
 
-
-# ---------------------------------------------------------------------------
-# HTTP server
-# ---------------------------------------------------------------------------
 
 class CrimeHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:  # noqa: A002
@@ -623,9 +604,13 @@ class CrimeHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
 
 
-def run(host: str = "127.0.0.1", port: int = 8080) -> None:
+def run(host: str | None = None, port: int | None = None) -> None:
     if not TEMPLATE_PATH.exists():
         raise SystemExit(f"Template not found: {TEMPLATE_PATH}")
+
+    # Railway / cloud: bind 0.0.0.0 and use $PORT
+    host = host or os.environ.get("HOST", "0.0.0.0")
+    port = port or int(os.environ.get("PORT", "8080"))
 
     start_poller()
 
