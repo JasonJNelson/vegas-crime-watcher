@@ -1,0 +1,25 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/healthz", "destination": "/api/health" },
+    { "source": "/api/health", "destination": "/api/health" },
+    { "source": "/api/crimes", "destination": "/api/crimes" },
+    { "source": "/api/simulate", "destination": "/api/simulate" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    }
+  ],
+  "functions": {
+    "api/**/*.py": {
+      "excludeFiles": "{tests/**,.github/**,**/__pycache__/**,**/*.md,Dockerfile,docker-compose.yml,railway.toml,nixpacks.toml,Procfile}"
+    }
+  }
+}
