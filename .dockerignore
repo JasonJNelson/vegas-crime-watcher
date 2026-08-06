@@ -1,0 +1,39 @@
+# Git / IDE
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# Python junk
+__pycache__
+*.py[cod]
+*$py.class
+.Python
+.venv
+venv
+env
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Tests & docs (not needed at runtime)
+tests
+*.md
+!README.md
+
+# Local / deploy meta
+Procfile
+railway.toml
+nixpacks.toml
+runtime.txt
+docker-compose*.yml
+.dockerignore
+Dockerfile*
+
+# Misc
+*.log
+.DS_Store
+tmp
+artifacts
