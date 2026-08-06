@@ -125,5 +125,34 @@ class TestHealth(unittest.TestCase):
         self.assertIn("poll_interval_sec", payload)
 
 
+class TestBind(unittest.TestCase):
+    def setUp(self) -> None:
+        import os
+        self._saved = {k: os.environ.get(k) for k in ("PORT", "HOST", "ALLOW_PUBLIC")}
+        for k in ("PORT", "HOST", "ALLOW_PUBLIC"):
+            os.environ.pop(k, None)
+
+    def tearDown(self) -> None:
+        import os
+        for k, v in self._saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_default_localhost(self) -> None:
+        self.assertEqual(app._resolve_bind(None, None), ("127.0.0.1", 8080))
+
+    def test_port_env_public(self) -> None:
+        import os
+        os.environ["PORT"] = "8080"
+        self.assertEqual(app._resolve_bind(None, None), ("0.0.0.0", 8080))
+
+    def test_allow_public(self) -> None:
+        import os
+        os.environ["ALLOW_PUBLIC"] = "1"
+        self.assertEqual(app._resolve_bind(None, None), ("0.0.0.0", 8080))
+
+
 if __name__ == "__main__":
     unittest.main()
