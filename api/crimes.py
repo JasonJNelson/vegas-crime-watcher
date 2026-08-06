@@ -1,7 +1,4 @@
-"""
-Vercel serverless: GET /api/crimes
-Returns seed crimes + optional live LVMPD ArcGIS CFS (on-demand).
-"""
+"""Vercel serverless: GET /api/crimes"""
 from __future__ import annotations
 
 import json
@@ -13,13 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import app  # noqa: E402
+from lib.core import SEED_CRIMES, fetch_lvmpd_cfs  # noqa: E402
 
 
 def _load_crimes() -> list[dict]:
-    crimes = list(app.SEED_CRIMES)
+    crimes = list(SEED_CRIMES)
     try:
-        live = app.fetch_lvmpd_cfs(limit=80)
+        live = fetch_lvmpd_cfs(limit=80)
         seen = {str(c.get("id")) for c in crimes}
         for c in live:
             cid = str(c.get("id"))

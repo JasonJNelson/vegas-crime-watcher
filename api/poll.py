@@ -1,9 +1,4 @@
-"""
-Vercel serverless: GET/POST /api/poll
-
-Triggered by Vercel Cron (and manually). Fetches LVMPD ArcGIS CFS on demand.
-Optional: set CRON_SECRET env → require Authorization: Bearer <secret>
-"""
+"""Vercel serverless: GET/POST /api/poll (Cron target)."""
 from __future__ import annotations
 
 import json
@@ -17,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import app  # noqa: E402
+from lib.core import fetch_lvmpd_cfs  # noqa: E402
 
 
 def _authorized(headers) -> bool:
@@ -35,7 +30,7 @@ def _authorized(headers) -> bool:
 def _run_poll() -> dict:
     started = datetime.now(timezone.utc).isoformat()
     try:
-        fetched = app.fetch_lvmpd_cfs(limit=100)
+        fetched = fetch_lvmpd_cfs(limit=100)
         return {
             "ok": True,
             "fetched": len(fetched),

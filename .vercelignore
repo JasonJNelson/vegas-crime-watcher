@@ -1,0 +1,13 @@
+tests
+.github
+__pycache__
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+railway.toml
+nixpacks.toml
+Procfile
+.git
+run_server.py
+templates

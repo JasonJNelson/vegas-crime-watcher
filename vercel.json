@@ -1,14 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
   "cleanUrls": true,
   "rewrites": [
     { "source": "/health", "destination": "/api/health" },
-    { "source": "/healthz", "destination": "/api/health" },
-    { "source": "/api/health", "destination": "/api/health" },
-    { "source": "/api/crimes", "destination": "/api/crimes" },
-    { "source": "/api/simulate", "destination": "/api/simulate" },
-    { "source": "/api/poll", "destination": "/api/poll" }
+    { "source": "/healthz", "destination": "/api/health" }
   ],
   "headers": [
     {
@@ -26,7 +21,8 @@
   ],
   "functions": {
     "api/**/*.py": {
-      "excludeFiles": "{tests/**,.github/**,**/__pycache__/**,**/*.md,Dockerfile,docker-compose.yml,railway.toml,nixpacks.toml,Procfile}"
+      "maxDuration": 60,
+      "excludeFiles": "{tests/**,.github/**,**/__pycache__/**,**/*.md,Dockerfile*,docker-compose*.yml,railway.toml,nixpacks.toml,Procfile,templates/**}"
     }
   }
 }
