@@ -1,1 +1,2 @@
 # No external dependencies — pure Python standard library
+# CI: GitHub Actions runs unittest + smoke server on every push/PR
