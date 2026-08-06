@@ -25,15 +25,59 @@ Complete working interactive Las Vegas crime map and live-style incident feed.
 | **Seed** | Illustrative incidents from public LVMPD press / local reporting (July 2026) |
 | **Simulated** | Demo "+" button / `POST /api/simulate` |
 
-CFS records are **calls for service**, not always confirmed crimes. The app maps classifications into homicide / shooting / robbery / assault / burglary / theft / vandalism / other.
+CFS records are **calls for service**, not always confirmed crimes.
 
-## Run
+## Run (local)
 
 ```bash
 python app.py
+# → http://127.0.0.1:8080
 ```
 
-Open **http://127.0.0.1:8080**
+## Docker
+
+Railway uses the `Dockerfile` when present (`railway.toml` sets `builder = "DOCKERFILE"`).
+
+### Build & run locally
+
+```bash
+docker build -t vegas-crime-watcher .
+docker run --rm -p 8080:8080 -e PORT=8080 vegas-crime-watcher
+# → http://localhost:8080
+```
+
+Or with Compose:
+
+```bash
+docker compose up --build
+```
+
+Image notes:
+
+- Base: `python:3.12-slim-bookworm`
+- No `pip install` (stdlib only)
+- Non-root user `appuser`
+- `HEALTHCHECK` → `/api/health`
+- Listens on `0.0.0.0:$PORT`
+
+### Railway + Docker
+
+1. Push this repo (Dockerfile is on `main`).
+2. **New Project → Deploy from GitHub** → select the repo.
+3. Railway builds from `Dockerfile`.
+4. **Settings → Networking → Generate Domain**.
+
+If it still uses Nixpacks, set:
+`RAILWAY_DOCKERFILE_PATH=Dockerfile`
+or **Settings → Build → Builder → Dockerfile**.
+
+## Deploy (Railway)
+
+1. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
+2. Select **JasonJNelson/vegas-crime-watcher**.
+3. App binds to `0.0.0.0:$PORT` (Railway injects `PORT`).
+4. Generate a public domain under **Networking**.
+5. Health: `GET /api/health`
 
 ## API
 
@@ -50,42 +94,18 @@ Open **http://127.0.0.1:8080**
 
 ```
 vegas-crime-watcher/
-├── app.py                  # server + ArcGIS poller + seed data
-├── templates/
-│   └── index.html          # interactive front-end
+├── app.py
+├── templates/index.html
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── railway.toml
+├── Procfile
 ├── tests/
-│   └── test_app.py         # unit tests
-├── .github/workflows/
-│   └── ci.yml              # GitHub Actions CI
-├── Procfile / railway.toml # Railway deploy
-├── README.md
-└── requirements.txt
+└── .github/workflows/ci.yml
 ```
 
-## Config (in `app.py`)
-
-- `POLL_INTERVAL_SEC` — default `600` (10 min)
-- `POLL_LIMIT` — max CFS records per poll (default `150`)
-- `ARCGIS_QUERY_URL` — LVMPD FeatureServer query endpoint
-- `PORT` / `HOST` — env vars used on Railway (default `0.0.0.0:8080`)
-
-## Deploy (Railway)
-
-1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
-2. Select **JasonJNelson/vegas-crime-watcher**.
-3. Railway detects Python (Nixpacks) and runs `python app.py`.
-4. App binds to `0.0.0.0:$PORT` (Railway sets `PORT`).
-5. **Settings → Networking → Generate Domain** for a public URL.
-6. Health check: `GET /api/health`
-
 ## CI
-
-GitHub Actions runs on every push and PR to `main`:
-
-- Syntax check (`py_compile`)
-- Unit tests (`python -m unittest`)
-- Smoke test of the HTTP server
-- Optional live ArcGIS poll (non-blocking)
 
 ```bash
 python -m unittest discover -s tests -v
@@ -93,8 +113,7 @@ python -m unittest discover -s tests -v
 
 ## Notes
 
-- This is a **demo / educational** project — not an official police product.
-- LVMPD does not guarantee completeness of open data.
+- Demo / educational — not an official police product.
 - Always call **911** for emergencies.
 
 ## License
